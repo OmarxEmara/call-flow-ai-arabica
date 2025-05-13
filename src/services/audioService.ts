@@ -112,7 +112,8 @@ export const continueCall = async (answer: string): Promise<boolean> => {
       throw new Error('Failed to process continue call response');
     }
     
-    return true;
+    const data = await response.json();
+    return data.continue || false;
   } catch (error) {
     console.error("Error processing continue call:", error);
     return false;

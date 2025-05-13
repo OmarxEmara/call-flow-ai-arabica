@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,34 +11,63 @@ import { getCustomers, updateCustomerStatus } from "@/services/customerService";
 import { toast } from "@/components/ui/sonner";
 
 const Index = () => {
-  const [customers, setCustomers] = useState(getCustomers());
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
-  const handleSelectCustomer = (customer: Customer) => {
+  // Fetch customers when component mounts
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        setIsLoading(true);
+        const result = await getCustomers();
+        setCustomers(result);
+      } catch (error) {
+        console.error("Failed to fetch customers:", error);
+        toast.error("فشل في جلب بيانات العملاء");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchCustomers();
+  }, []);
+  
+  const handleSelectCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
     // Update customer status to in_progress if it was pending
     if (customer.status === 'pending') {
-      const updatedCustomer = updateCustomerStatus(customer.id, 'in_progress');
-      setCustomers(prev => 
-        prev.map(c => c.id === customer.id ? updatedCustomer : c)
-      );
+      try {
+        const updatedCustomer = await updateCustomerStatus(customer.id, 'in_progress');
+        setCustomers(prev => 
+          prev.map(c => c.id === customer.id ? updatedCustomer : c)
+        );
+      } catch (error) {
+        console.error("Failed to update customer status:", error);
+        toast.error("فشل في تحديث حالة العميل");
+      }
     }
   };
   
-  const handleEndCall = (feedback?: number) => {
+  const handleEndCall = async (feedback?: number) => {
     if (selectedCustomer) {
-      const updatedCustomer = updateCustomerStatus(
-        selectedCustomer.id, 
-        'resolved',
-        feedback
-      );
-      
-      setCustomers(prev => 
-        prev.map(c => c.id === selectedCustomer.id ? updatedCustomer : c)
-      );
-      
-      toast.success("تم انهاء المكالمة وتحديث حالة العميل");
+      try {
+        const updatedCustomer = await updateCustomerStatus(
+          selectedCustomer.id, 
+          'resolved',
+          feedback
+        );
+        
+        setCustomers(prev => 
+          prev.map(c => c.id === selectedCustomer.id ? updatedCustomer : c)
+        );
+        
+        toast.success("تم انهاء المكالمة وتحديث حالة العميل");
+      } catch (error) {
+        console.error("Failed to update customer status:", error);
+        toast.error("فشل في تحديث حالة العميل");
+      }
     }
   };
   
@@ -56,7 +85,11 @@ const Index = () => {
         </div>
       </div>
       
-      {selectedCustomer ? (
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <p className="text-lg">جاري تحميل بيانات العملاء...</p>
+        </div>
+      ) : selectedCustomer ? (
         <CallInterface 
           customer={selectedCustomer} 
           onEndCall={handleEndCall}

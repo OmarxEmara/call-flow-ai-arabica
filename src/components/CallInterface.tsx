@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Customer } from '@/types/customer';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Mic, Volume2, Send } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { toast } from '@/components/ui/sonner';
+import { 
+  startListening, 
+  stopListening, 
+  speakText, 
+  getFeedback as submitFeedback,
+  continueCall,
+  handleQuestion
+} from '@/services/audioService';
 
 interface CallInterfaceProps {
   customer: Customer;
@@ -28,58 +37,10 @@ const CallInterface: React.FC<CallInterfaceProps> = ({ customer, onEndCall, onBa
   const [messages, setMessages] = useState<Message[]>([]);
   const [feedback, setFeedback] = useState<number | null>(null);
   const [inputText, setInputText] = useState('');
+  const [conversationStep, setConversationStep] = useState<'initial' | 'questions' | 'feedback'>('initial');
   
-  // Mock conversation flow
-  const mockConversationFlow = [
-    {
-      text: `اهلا وسهلا, صباح الخير ${customer.user}، بكلم حضرتك بخصوص مشكلة رقم ${customer.ticket_id} و اللي كانت بخصوص ${customer.issue}. هسأل حضرتك شوية أسْئِلَة للمتابعة, و لو سمحت الاجابة تكون ب آه او لا علا الأسْئِلَة. لو الوقت مناسب مع حضرتك دلوقتي ممكن نكمل, و لو لا, ممكن اتصل نتكلم في وقت تاني. تمام نكمل ولا لا؟`,
-      sender: 'ai' as const,
-    },
-    {
-      text: "آه، تمام",
-      sender: 'customer' as const,
-    },
-    {
-      text: "اول سؤال , هل المشكلة اتحلت يا فندم؟",
-      sender: 'ai' as const,
-    },
-    {
-      text: "لا، لسه",
-      sender: 'customer' as const,
-    },
-    {
-      text: "طب حضرتك خلصت الخطوات المطلوبة يا فندم؟",
-      sender: 'ai' as const,
-    },
-    {
-      text: "ايوه خلصتها",
-      sender: 'customer' as const,
-    },
-    {
-      text: "هَصْعَد مشكلة حضرتك للمختصين. آسفين علا التأخير يا فندم. المشكلة هتتحل في خلال 3 أيام عمل. ممكن حضرتك تقَيِّم الخدمة و تقول لنا رأيك من واحد لخمسة؟",
-      sender: 'ai' as const,
-    }
-  ];
-
-  const handleStartCall = () => {
-    setCallState('calling');
-    toast("جاري الاتصال بالعميل...");
-    
-    // Simulate connection delay
-    setTimeout(() => {
-      setCallState('connected');
-      toast.success("تم الاتصال بنجاح");
-      
-      // Add first message after connection
-      addMessage(mockConversationFlow[0].text, 'ai');
-      setCallState('speaking');
-      
-      // Simulate AI speaking
-      setTimeout(() => {
-        setCallState('listening');
-      }, 5000);
-    }, 2000);
-  };
+  // The initial message to the customer
+  const initialMessage = `اهلا وسهلا, صباح الخير ${customer.user}، بكلم حضرتك بخصوص مشكلة رقم ${customer.ticket_id} و اللي كانت بخصوص ${customer.issue}. هسأل حضرتك شوية أسْئِلَة للمتابعة, و لو سمحت الاجابة تكون ب آه او لا علا الأسْئِلَة. لو الوقت مناسب مع حضرتك دلوقتي ممكن نكمل, و لو لا, ممكن اتصل نتكلم في وقت تاني. تمام نكمل ولا لا؟`;
 
   const addMessage = (text: string, sender: 'ai' | 'customer') => {
     const newMessage = {
@@ -92,83 +53,130 @@ const CallInterface: React.FC<CallInterfaceProps> = ({ customer, onEndCall, onBa
     setMessages(prev => [...prev, newMessage]);
   };
 
-  const handleSendMessage = () => {
+  const handleStartCall = async () => {
+    setCallState('calling');
+    toast("جاري الاتصال بالعميل...");
+    
+    // Simulate connection delay
+    setTimeout(async () => {
+      setCallState('connected');
+      toast.success("تم الاتصال بنجاح");
+      
+      // Add first message after connection
+      addMessage(initialMessage, 'ai');
+      setCallState('speaking');
+      
+      // Use the TTS service to speak the message
+      try {
+        await speakText(initialMessage);
+        setCallState('listening');
+      } catch (error) {
+        console.error("Error speaking text:", error);
+        toast.error("حدث خطأ في تحويل النص إلى كلام");
+        setCallState('listening');
+      }
+    }, 2000);
+  };
+
+  const handleVoiceInput = async () => {
+    toast("جاري الاستماع...");
+    setCallState('listening');
+    
+    try {
+      // Start listening
+      await startListening();
+      
+      // After a moment, stop listening and get the transcribed text
+      const result = await stopListening();
+      addMessage(result.text, 'customer');
+      
+      // Process the response based on where we are in the conversation
+      await processCustomerResponse(result.text);
+    } catch (error) {
+      console.error("Error handling voice input:", error);
+      toast.error("حدث خطأ أثناء الاستماع");
+      setCallState('connected');
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
     
     // Add customer message
     addMessage(inputText, 'customer');
+    const messageToProcess = inputText;
     setInputText('');
     
-    // Determine where we are in the conversation flow
-    const aiMessageCount = messages.filter(m => m.sender === 'ai').length;
-    
-    if (aiMessageCount < mockConversationFlow.filter(m => m.sender === 'ai').length) {
-      setCallState('speaking');
-      
-      // Simulate AI processing and response
-      setTimeout(() => {
-        // Get next AI message from flow
-        const nextAiMessageIndex = mockConversationFlow.findIndex(
-          (m, i) => m.sender === 'ai' && i > aiMessageCount * 2 - 1
-        );
-        
-        if (nextAiMessageIndex !== -1) {
-          addMessage(mockConversationFlow[nextAiMessageIndex].text, 'ai');
-        }
-        
-        setTimeout(() => {
-          setCallState('listening');
-        }, 3000);
-      }, 1500);
-    } else {
-      // End of script reached
-      handleFeedbackSubmission(parseInt(inputText));
-    }
+    await processCustomerResponse(messageToProcess);
   };
 
-  const handleFeedbackSubmission = (rating: number) => {
-    if (rating >= 1 && rating <= 5) {
-      setFeedback(rating);
-      toast.success(`شكرا لتقييمك: ${rating}/5`);
-      
-      // Add AI thank you message
-      addMessage("شكرا لوقت حضرتك, مع السلامة", 'ai');
-      
-      // End call after delay
-      setTimeout(() => {
-        setCallState('ended');
-        onEndCall(rating);
-      }, 2000);
-    } else {
-      toast.error("برجاء إدخال رقم من 1 إلى 5");
-    }
-  };
-
-  const handleVoiceInput = () => {
-    toast("جاري الاستماع...");
-    setCallState('listening');
+  const processCustomerResponse = async (response: string) => {
+    setCallState('speaking');
     
-    // Simulate voice recognition
-    setTimeout(() => {
-      const customerResponses = mockConversationFlow.filter(m => m.sender === 'customer');
-      const customerMessageCount = messages.filter(m => m.sender === 'customer').length;
-      
-      if (customerMessageCount < customerResponses.length) {
-        const nextResponse = customerResponses[customerMessageCount].text;
-        addMessage(nextResponse, 'customer');
-        
-        // Simulate AI processing and response
-        setCallState('speaking');
-        setTimeout(() => {
-          const nextAiMessage = mockConversationFlow[customerMessageCount * 2 + 1].text;
-          addMessage(nextAiMessage, 'ai');
-          
+    try {
+      if (conversationStep === 'initial') {
+        // Handle the initial question about continuing the call
+        const shouldContinue = await continueCall(response);
+        if (shouldContinue) {
+          const nextMessage = "اول سؤال , هل المشكلة اتحلت يا فندم؟";
+          addMessage(nextMessage, 'ai');
+          await speakText(nextMessage);
+          setConversationStep('questions');
+        } else {
+          const endMessage = "تمام يا فندم مفيش مشكلة, هكلم حضرتك في وقت تاني, اسف علي الازعاج.";
+          addMessage(endMessage, 'ai');
+          await speakText(endMessage);
           setTimeout(() => {
-            setCallState('listening');
+            setCallState('ended');
           }, 3000);
-        }, 1500);
+        }
+      } else if (conversationStep === 'questions') {
+        // Handle the follow-up questions
+        const result = await handleQuestion(response);
+        addMessage(result.message, 'ai');
+        await speakText(result.message);
+        
+        if (result.nextStep === 'feedback') {
+          setConversationStep('feedback');
+        } else if (result.nextStep === 'complete') {
+          setTimeout(() => {
+            setCallState('ended');
+            onEndCall();
+          }, 3000);
+        }
+      } else if (conversationStep === 'feedback') {
+        // Handle feedback submission
+        try {
+          const feedbackValue = parseInt(response);
+          if (feedbackValue >= 1 && feedbackValue <= 5) {
+            await submitFeedback(feedbackValue);
+            setFeedback(feedbackValue);
+            
+            const thankYouMessage = "شكرا لوقت حضرتك, مع السلامة";
+            addMessage(thankYouMessage, 'ai');
+            await speakText(thankYouMessage);
+            
+            setTimeout(() => {
+              setCallState('ended');
+              onEndCall(feedbackValue);
+            }, 3000);
+          } else {
+            const errorMessage = "برجاء إدخال رقم من 1 إلى 5";
+            addMessage(errorMessage, 'ai');
+            await speakText(errorMessage);
+          }
+        } catch (error) {
+          const errorMessage = "برجاء إدخال رقم من 1 إلى 5";
+          addMessage(errorMessage, 'ai');
+          await speakText(errorMessage);
+        }
       }
-    }, 2000);
+    } catch (error) {
+      console.error("Error processing customer response:", error);
+      toast.error("حدث خطأ في معالجة الرد");
+    } finally {
+      setCallState('listening');
+    }
   };
 
   const renderCallControls = () => {
