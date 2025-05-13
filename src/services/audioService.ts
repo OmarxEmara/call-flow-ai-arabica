@@ -1,20 +1,15 @@
 
-// Audio service that connects to the Python backend API
+// Audio service with mock API responses (no backend required)
+import { toast } from "@/components/ui/sonner";
 
-// API base URL - adjust this to match your Python backend URL
-const API_BASE_URL = 'http://localhost:5000'; // Change this to your Python API endpoint
+// Mock implementation (no backend required)
+const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const startListening = async (): Promise<boolean> => {
-  console.log("Starting listening...");
+  console.log("Starting listening (mock)...");
   try {
-    const response = await fetch(`${API_BASE_URL}/start_listening`, {
-      method: 'POST',
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to start listening');
-    }
-    
+    // Simulate API delay
+    await mockDelay(500);
     return true;
   } catch (error) {
     console.error("Error starting listening:", error);
@@ -23,40 +18,38 @@ export const startListening = async (): Promise<boolean> => {
 };
 
 export const stopListening = async (): Promise<{ text: string }> => {
-  console.log("Stopping listening...");
+  console.log("Stopping listening (mock)...");
   try {
-    // This endpoint should trigger your Python function listen_and_transcribe()
-    const response = await fetch(`${API_BASE_URL}/stop_listening`, {
-      method: 'POST',
-    });
+    // Simulate API delay
+    await mockDelay(1000);
     
-    if (!response.ok) {
-      throw new Error('Failed to stop listening');
-    }
+    // Generate a random Arabic response
+    const responses = [
+      "نعم",
+      "لا",
+      "تمام",
+      "ممكن",
+      "اتفضل",
+      "مش متأكد",
+      "طبعاً",
+      "شكراً",
+      "ماشي"
+    ];
     
-    const data = await response.json();
-    return { text: data.transcript || "لم يتم التعرف على الكلام" };
+    const randomIndex = Math.floor(Math.random() * responses.length);
+    return { text: responses[randomIndex] };
   } catch (error) {
     console.error("Error stopping listening:", error);
-    return { text: "حدث خطأ في التعرف على الكلام" };
+    return { text: "لم يتم التعرف على الكلام" };
   }
 };
 
 export const speakText = async (text: string): Promise<boolean> => {
-  console.log(`Speaking: ${text}`);
+  console.log(`Speaking (mock): ${text}`);
   try {
-    // This endpoint should trigger your Python function text_to_speech()
-    const response = await fetch(`${API_BASE_URL}/speak`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text }),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to speak text');
-    }
+    // Simulate API delay - longer text takes longer to speak
+    const speakingTime = Math.max(1000, text.length * 50);
+    await mockDelay(speakingTime);
     
     return true;
   } catch (error) {
@@ -74,21 +67,11 @@ export const setAPIKey = (key: string): void => {
 };
 
 export const getFeedback = async (rating: number): Promise<boolean> => {
-  console.log(`Submitting feedback: ${rating}`);
+  console.log(`Submitting feedback (mock): ${rating}`);
   try {
-    // This endpoint should trigger your Python function get_feedback()
-    const response = await fetch(`${API_BASE_URL}/feedback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ rating }),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to submit feedback');
-    }
-    
+    // Simulate API delay
+    await mockDelay(500);
+    toast.success(`تم تسجيل التقييم: ${rating}/5`);
     return true;
   } catch (error) {
     console.error("Error submitting feedback:", error);
@@ -97,26 +80,20 @@ export const getFeedback = async (rating: number): Promise<boolean> => {
 };
 
 export const continueCall = async (answer: string): Promise<boolean> => {
-  console.log(`Continue call response: ${answer}`);
+  console.log(`Continue call response (mock): ${answer}`);
   try {
-    // This endpoint should trigger your Python function continue_call_or_not()
-    const response = await fetch(`${API_BASE_URL}/continue_call`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ answer }),
-    });
+    // Simulate API delay
+    await mockDelay(500);
     
-    if (!response.ok) {
-      throw new Error('Failed to process continue call response');
-    }
+    // Simple logic to determine if call should continue
+    const positiveResponses = ["نعم", "تمام", "موافق", "أيوة", "آه", "اه"];
+    const lowerAnswer = answer.toLowerCase();
     
-    const data = await response.json();
-    return data.continue || false;
+    // Check if any positive response is included in the answer
+    return positiveResponses.some(response => lowerAnswer.includes(response.toLowerCase())) || Math.random() > 0.2;
   } catch (error) {
     console.error("Error processing continue call:", error);
-    return false;
+    return true; // Default to continuing the call
   }
 };
 
@@ -124,28 +101,38 @@ export const handleQuestion = async (answer: string): Promise<{
   nextStep: 'feedback' | 'follow_up' | 'complete',
   message: string
 }> => {
-  console.log(`Handling question response: ${answer}`);
+  console.log(`Handling question response (mock): ${answer}`);
   try {
-    // This endpoint should handle your Python handle_questions() function logic
-    const response = await fetch(`${API_BASE_URL}/handle_question`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ answer }),
-    });
+    // Simulate API delay
+    await mockDelay(1000);
     
-    if (!response.ok) {
-      throw new Error('Failed to handle question response');
+    // Simple mock logic to determine next step
+    const questionCount = parseInt(localStorage.getItem('questionCount') || '0');
+    localStorage.setItem('questionCount', (questionCount + 1).toString());
+    
+    if (questionCount >= 2) {
+      // After 3 questions, ask for feedback
+      localStorage.setItem('questionCount', '0'); // Reset counter
+      return {
+        nextStep: 'feedback',
+        message: "شكراً على الإجابات، ممكن حضرتك تُقَيِّم الخدمة و تقول لنا رأيك من واحد لخمسة؟"
+      };
+    } else if (questionCount === 0) {
+      return {
+        nextStep: 'follow_up',
+        message: "طب حضرتك خلصت الخطوات المطلوبة يا فندم؟"
+      };
+    } else {
+      return {
+        nextStep: 'follow_up',
+        message: "هل لديك أي استفسارات أخرى متعلقة بهذه المشكلة؟"
+      };
     }
-    
-    const data = await response.json();
-    return data;
   } catch (error) {
     console.error("Error handling question:", error);
     return {
       nextStep: 'complete',
-      message: "حدث خطأ في معالجة الإجابة"
+      message: "شكراً للتواصل معنا، سعداء بخدمتك"
     };
   }
 };
