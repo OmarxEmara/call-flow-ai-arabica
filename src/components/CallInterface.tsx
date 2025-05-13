@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Customer } from '@/types/customer';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -6,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Mic, Volume2, Send } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
 import { toast } from '@/components/ui/sonner';
 
 interface CallInterfaceProps {
@@ -247,11 +247,11 @@ const CallInterface: React.FC<CallInterfaceProps> = ({ customer, onEndCall, onBa
             <CardTitle>
               رقم التذكرة: {customer.ticket_id}
             </CardTitle>
-            <Badge className={
-              callState === 'ready' ? 'bg-gray-200 text-gray-800' :
-              callState === 'calling' ? 'bg-call-waiting text-black' :
-              callState === 'ended' ? 'bg-call-inactive text-white' :
-              'bg-call-active text-white'
+            <Badge variant={
+              callState === 'ready' ? 'outline' :
+              callState === 'calling' ? 'secondary' :
+              callState === 'ended' ? 'destructive' :
+              'default'
             }>
               {callState === 'ready' && 'جاهز للاتصال'}
               {callState === 'calling' && 'جاري الاتصال'}
